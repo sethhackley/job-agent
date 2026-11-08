@@ -5,6 +5,10 @@ watch job-agent score the fit and write a fact-checked cover letter, running on 
 (RTX 5080, Ollama) rather than in the cloud. A recorded demo page on the portfolio stays as the
 always-available fallback.
 
+The same web interface also serves as the owner's own front end ("owner mode", below), from any
+browser including a phone. This replaces the previously planned desktop window, which is no
+longer needed.
+
 ## Constraints
 - The PC is on throughout the day (it also runs Jellyfin), but it can restart or be busy.
   The demo page must handle "offline" gracefully and link to the recorded demo.
@@ -60,6 +64,31 @@ local API server on 127.0.0.1:<port>  ──►  job_agent (resume, letters)  �
   same layout as the recorded demo (fit, draft with flagged sentences, revision, final letter).
 - On network error or Access denial, explain and link to the recorded demo.
 
+### Owner mode
+The owner uses the same page and server for real applications. Two modes, decided by the
+server from the verified Access identity, never from anything the browser sends:
+
+| | Visitor mode | Owner mode |
+|---|---|---|
+| Who | Emails on the visitor allow-list | Only the owner's email (`OWNER_EMAIL` setting on the server) |
+| Resume | Uploaded per run, never saved | Owner's saved profile (`resume.load_or_parse()`); can re-upload to update it |
+| Confirmed facts | Never loaded (`confirmed_facts=[]`) | Loaded from `confirmed_facts.txt`; owner can view and add facts |
+| Letters | Returned only, never saved | Saved with `letters.save_letter()`; downloadable as `.docx` / `.txt` |
+| Tracker | Not touched | Each scored job recorded with `Tracker.record_score()`; letters attached; owner can change status and add notes; list view of applications |
+| Job inbox | Not available | Owner can rank the jobs inbox (`ranking.load_jobs()` / `rank_jobs()`) and add jobs to it from the page |
+
+Requirements:
+- Owner-only routes live under a separate path (for example `/owner/...`) and every one checks
+  that the Access JWT email equals `OWNER_EMAIL`. Missing or mismatched identity returns 403,
+  even if the request somehow arrives without Access in front.
+- Use a separate Cloudflare Access policy for owner routes (owner email only), in addition to
+  the server-side check, so a mistake in one layer doesn't expose the owner's data.
+- Visitor routes must stay unable to read or write owner data. Keep the code paths separate
+  rather than branching inside shared handlers.
+- Owner mode shows the same review aids as the demo: fact-check flags, removed sentences, and
+  a reminder to review before sending.
+- The owner's data stays in `~/.local/share/job-agent/` with its current file permissions.
+
 ### Operations
 - `cloudflared` and the API server as systemd user services that start on boot.
 - A health endpoint the page checks before enabling the Run button.
@@ -67,5 +96,9 @@ local API server on 127.0.0.1:<port>  ──►  job_agent (resume, letters)  �
 
 ## Testing
 - Unit tests for limits (size, type, queue full, timeout) and for "never touches owner data".
+- Unit tests that owner routes reject visitor and missing identities (403), and that visitor
+  routes never read or write the profile, facts, letters folder or tracker database.
+- Owner-mode tests with a temporary data directory: scoring records to the tracker, letters
+  save and attach, status changes persist.
 - Manual: Access login flow, upload each file type, offline behaviour, Jellyfin streaming
   during a run.

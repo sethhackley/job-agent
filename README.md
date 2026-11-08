@@ -127,7 +127,9 @@ facts, the tracker, job-file parsing and ranking. They use a fake model, so Olla
 ## Known limitations
 - The fact-check misses some claims that blend true facts into a false one. Planned fix: split
   the resume into sections in code and check each claim against only its matching section.
-- No desktop window yet, and no automatic job-listing fetcher (jobs are saved as text files).
+- No web interface yet: a live demo with an owner mode (one interface for visitors and for my own
+  use) is planned in [docs/live-demo-plan.md](docs/live-demo-plan.md). No automatic job-listing
+  fetcher either; jobs are saved as text files.
 - Always read a letter before sending it.
 
 ## License

@@ -10,6 +10,10 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 PROFILE_PATH = DATA_DIR / "profile.json"
 DB_PATH = DATA_DIR / "jobs.db"
 TRACKER_PATH = DATA_DIR / "applications.db"
+# True facts about you that aren't on the resume, one per line, each naming its job/section,
+# e.g. "Qualcomm Technologies (Testing Technician): Reproduced reported bugs ...".
+# Letters, fit scoring and the fact-check treat these like resume text.
+FACTS_PATH = DATA_DIR / "confirmed_facts.txt"
 JOBS_INBOX = DATA_DIR / "jobs-inbox"  # drop pasted job descriptions here as .txt files
 BROWSER_DIR = DATA_DIR / "browser-profile"
 LETTERS_DIR = DATA_DIR / "letters"
@@ -60,6 +64,24 @@ def load_settings() -> dict:
 def save_settings(settings: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
+
+
+def load_facts() -> list[str]:
+    if not FACTS_PATH.exists():
+        return []
+    return [line.strip() for line in FACTS_PATH.read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")]
+
+
+def add_fact(fact: str) -> None:
+    """Append a confirmed fact (skips exact duplicates)."""
+    fact = " ".join(fact.split())
+    if not fact or fact in load_facts():
+        return
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with FACTS_PATH.open("a") as f:
+        f.write(fact + "\n")
+    FACTS_PATH.chmod(0o600)
 
 
 def load_profile() -> dict | None:

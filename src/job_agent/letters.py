@@ -107,6 +107,24 @@ def _profile_brief(profile: dict) -> str:
     )
 
 
+def evidence(profile: dict) -> str:
+    """Resume text plus any facts the applicant has confirmed that aren't on the resume.
+
+    Facts come from profile["confirmed_facts"] if present, otherwise config.FACTS_PATH.
+    """
+    if "confirmed_facts" in profile:
+        facts = profile["confirmed_facts"]
+    else:
+        from .config import load_facts
+        facts = load_facts()
+    text = profile.get("resume_text", "")
+    if facts:
+        text += ("\n\nADDITIONAL FACTS CONFIRMED BY THE APPLICANT (true, but not on the resume; "
+                 "each names the job or section it belongs to):\n"
+                 + "\n".join(f"- {f}" for f in facts))
+    return text
+
+
 def similarity(llm: LLM, profile: dict, job_text: str) -> float:
     """Embedding cosine similarity between the resume and the job, 0-1."""
     resume = profile.get("resume_text") or _profile_brief(profile)
@@ -118,7 +136,7 @@ def similarity(llm: LLM, profile: dict, job_text: str) -> float:
 def score_fit(llm: LLM, profile: dict, job_text: str) -> dict:
     result = llm.chat(FIT_SYSTEM,
                       f"Candidate profile:\n{_profile_brief(profile)}\n\n"
-                      f"Full resume:\n{profile.get('resume_text', '')}\n\n"
+                      f"Full resume:\n{evidence(profile)}\n\n"
                       f"Job description:\n{job_text}",
                       schema=FIT_SCHEMA, temperature=0.2)
     result["similarity"] = round(similarity(llm, profile, job_text), 3)
@@ -168,7 +186,7 @@ def remove_sentences(letter: str, sentences: list[str]) -> tuple[str, list[str]]
 def fact_check(llm: LLM, profile: dict, letter: str) -> list[dict]:
     """Return the letter's claims about the applicant that the resume doesn't support."""
     result = llm.chat(CHECK_SYSTEM,
-                      f"Resume:\n{profile.get('resume_text', '')}\n\nCover letter:\n{letter}",
+                      f"Resume:\n{evidence(profile)}\n\nCover letter:\n{letter}",
                       schema=CHECK_SCHEMA, temperature=0.0, model=llm.check_model)
     return [c for c in result.get("claims", []) if not c.get("supported")]
 
@@ -183,7 +201,7 @@ def write_letter(llm: LLM, profile: dict, job_text: str, company: str = "",
     """
     greeting = f"Dear Hiring Team at {company}," if company else "Dear Hiring Team,"
     extra = f"\nExtra instructions from the applicant: {instructions}" if instructions else ""
-    resume = profile.get("resume_text", "")
+    resume = evidence(profile)
     letter = llm.chat(LETTER_SYSTEM,
                       f"Company: {company or 'unknown'}\nRole: {role or 'see description'}\n"
                       f"Start the letter with: {greeting}\n\n"

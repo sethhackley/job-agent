@@ -177,3 +177,25 @@ def test_saved_profile_is_private(isolated_data, tmp_path):
     saved = isolated_data / "profile.json"
     assert oct(saved.stat().st_mode)[-3:] == "600"
     assert json.loads(saved.read_text())["resume_path"] == str(resume.resolve())
+
+
+# --- confirmed facts ------------------------------------------------------
+
+def test_add_and_load_facts(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "FACTS_PATH", tmp_path / "facts.txt")
+    config.add_fact("Acme (QA):  Reproduced bugs.")
+    config.add_fact("Acme (QA): Reproduced bugs.")  # duplicate after whitespace cleanup
+    (tmp_path / "facts.txt").open("a").write("# a comment\n\n")
+    assert config.load_facts() == ["Acme (QA): Reproduced bugs."]
+    assert oct((tmp_path / "facts.txt").stat().st_mode)[-3:] == "600"
+
+
+def test_evidence_includes_confirmed_facts():
+    text = letters.evidence({"resume_text": "RESUME", "confirmed_facts": ["Acme (QA): Reproduced bugs."]})
+    assert text.startswith("RESUME") and "CONFIRMED BY THE APPLICANT" in text
+    assert "- Acme (QA): Reproduced bugs." in text
+
+
+def test_evidence_without_facts_is_just_the_resume():
+    assert letters.evidence({"resume_text": "RESUME", "confirmed_facts": []}) == "RESUME"

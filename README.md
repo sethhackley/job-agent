@@ -10,7 +10,7 @@ Local job-application helper. Everything runs on this machine using Ollama.
 ## Modules (`src/job_agent/`)
 | Module | What it does |
 |---|---|
-| `config.py` | Settings and data paths. Data lives in `~/.local/share/job-agent/` (not in this repo). |
+| `config.py` | Settings and data paths. Data lives in `~/.local/share/job-agent/` (not in this repo). `add_fact()` / `load_facts()` manage `confirmed_facts.txt`: true facts that aren't on the resume, one per line, each naming its job (e.g. `Qualcomm Technologies (Testing Technician): Reproduced bugs…`). Fit scoring, letter writing and the fact-check treat them like resume text. |
 | `llm.py` | Ollama client: chat (optional JSON schema, per-call model) and embeddings. |
 | `resume.py` | Reads PDF/DOCX/TXT/MD resumes; `parse_profile()` builds a structured profile; `load_or_parse()` caches it and re-parses only when the file changes. |
 | `intent.py` | `expand_intent()` turns a search phrase into related titles, keywords, exclusions and an ideal-job description. Seniority levels and titles above the candidate's experience are filtered out in code (`cap_seniority()`). |

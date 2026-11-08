@@ -8,18 +8,16 @@ from pathlib import Path
 DATA_DIR = Path.home() / ".local" / "share" / "job-agent"
 SETTINGS_PATH = DATA_DIR / "settings.json"
 PROFILE_PATH = DATA_DIR / "profile.json"
-DB_PATH = DATA_DIR / "jobs.db"
 TRACKER_PATH = DATA_DIR / "applications.db"
 # True facts about you that aren't on the resume, one per line, each naming its job/section,
-# e.g. "Qualcomm Technologies (Testing Technician): Reproduced reported bugs ...".
+# e.g. "Acme Corp (QA Analyst): Reproduced reported bugs ...".
 # Letters, fit scoring and the fact-check treat these like resume text.
 FACTS_PATH = DATA_DIR / "confirmed_facts.txt"
 JOBS_INBOX = DATA_DIR / "jobs-inbox"  # drop pasted job descriptions here as .txt files
-BROWSER_DIR = DATA_DIR / "browser-profile"
 LETTERS_DIR = DATA_DIR / "letters"
 
-# Company job boards with public APIs that permit programmatic reads.
-# Edit these in the app's Settings tab; boards that 404 are skipped.
+# Company job boards with public read APIs (Greenhouse, Lever, Ashby), checked to respond in
+# Nov 2026. Not used yet: reserved for a planned job-listing fetcher.
 DEFAULT_COMPANIES = {
     "greenhouse": [
         "airbnb", "asana", "cloudflare", "coinbase", "databricks", "discord",
@@ -42,11 +40,7 @@ DEFAULTS = {
     "check_model": "qwen3:14b",
     "embed_model": "nomic-embed-text",
     "num_ctx": 16384,
-    "rerank_top_n": 25,
     "companies": DEFAULT_COMPANIES,
-    "remote_only": False,
-    "locations": "",  # comma-separated, e.g. "Seattle, Remote (US)"
-    "last_intent": "",
 }
 
 

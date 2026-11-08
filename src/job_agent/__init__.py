@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from job-agent!")
+"""job-agent: local job application helper (see README.md)."""

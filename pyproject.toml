@@ -1,24 +1,20 @@
 [project]
 name = "job-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Local, GPU-run job application helper: resume parsing, job ranking, fact-checked cover letters and an application tracker, using Ollama."
 readme = "README.md"
 authors = [
     { name = "sethhackley", email = "skh1994@pm.me" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "beautifulsoup4>=4.15.0",
     "httpx>=0.28.1",
     "numpy>=2.5.4",
-    "playwright>=1.64.1",
     "pypdf>=7.0.0",
     "pyside6>=6.12.0",
     "python-docx>=1.2.0",
 ]
 
-[project.scripts]
-job-agent = "job_agent:main"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]

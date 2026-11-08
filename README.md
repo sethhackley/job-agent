@@ -1,24 +1,80 @@
 # job-agent
 
-Local job-application helper. Everything runs on this machine using Ollama.
+A job-application helper that runs entirely on your own computer. It reads your resume, ranks
+job postings against it, and writes tailored cover letters, then **fact-checks every claim in
+each letter against your resume** before you see it. Nothing is sent to a cloud AI service:
+the language models run locally on your GPU through [Ollama](https://ollama.com).
 
-## Requirements
-- Ollama running at `http://127.0.0.1:11434` with `qwen3:14b` and `nomic-embed-text` pulled.
-  (Here it runs in a podman container named `ollama` with GPU passthrough.)
-- [uv](https://docs.astral.sh/uv/) — `uv sync` installs Python 3.12 and dependencies.
+## Why
+Most AI cover letters are generic, and worse, they quietly invent experience: they borrow
+duties from the job description and attribute them to you. Sending a letter like that is
+worse than sending none. This project treats that as a QA problem: generate, then test the
+output against a source of truth, and remove anything that fails.
 
-## Modules (`src/job_agent/`)
-| Module | What it does |
+## What it does
+- **Resume parsing:** reads PDF, DOCX, TXT or Markdown into a structured profile (titles,
+  skills, education, highlights), cached until the file changes.
+- **Search expansion:** turns a loose phrase like "QA tester" into related titles and keywords,
+  capped in code to seniority levels your experience supports.
+- **Job ranking:** scores a folder of saved job descriptions by embedding similarity to your
+  resume and search, flags titles above your level or outside your search, then gives the top
+  matches a full fit score (1–10) with matched requirements and gaps.
+- **Fact-checked cover letters:** drafts a letter, checks each sentence about you against your
+  resume, revises, **deletes sentences that still fail**, and enforces banned phrases and length
+  in plain code. Saves `.docx` and `.txt`.
+- **Confirmed facts:** true experience that isn't on your resume can be added (tied to a specific
+  job) so it isn't stripped from letters.
+- **Application tracker:** a local SQLite log of every job scored or applied to (fit, letter,
+  status, dates, notes), with duplicate detection.
+
+## Results from testing on a real resume
+Hardware: RTX 5080 (16 GB), `qwen3:14b` for writing and checking, `nomic-embed-text` for matching.
+
+| Step | Time |
 |---|---|
-| `config.py` | Settings and data paths. Data lives in `~/.local/share/job-agent/` (not in this repo). `add_fact()` / `load_facts()` manage `confirmed_facts.txt`: true facts that aren't on the resume, one per line, each naming its job (e.g. `Qualcomm Technologies (Testing Technician): Reproduced bugs…`). Fit scoring, letter writing and the fact-check treat them like resume text. |
-| `llm.py` | Ollama client: chat (optional JSON schema, per-call model) and embeddings. |
-| `resume.py` | Reads PDF/DOCX/TXT/MD resumes; `parse_profile()` builds a structured profile; `load_or_parse()` caches it and re-parses only when the file changes. |
-| `intent.py` | `expand_intent()` turns a search phrase into related titles, keywords, exclusions and an ideal-job description. Seniority levels and titles above the candidate's experience are filtered out in code (`cap_seniority()`). |
-| `ranking.py` | `load_jobs()` reads saved job descriptions (one `.txt`/`.md` per job, default folder `~/.local/share/job-agent/jobs-inbox/`, optional `Company:`/`Role:`/`URL:` header lines or a `Company - Role.txt` filename). `rank_jobs()` orders them by embedding match against the resume and expanded search intent, flags titles above your level or matching exclusions, LLM-scores the top N, and records them in the tracker. Nothing is fetched from the web. |
-| `tracker.py` | `Tracker` — local SQLite application log (`applications.db`): fit, summary, gaps, letter path, status (`scored`, `letter_written`, `applied`, `interviewing`, `rejected`, `offer`, `skipped`), applied date and dated notes. Detects the same posting by description or company+role; never moves a status backwards when re-scoring. |
-| `letters.py` | `score_fit()` rates a pasted job description; `write_letter()` drafts a cover letter, fact-checks it against the resume, revises, deletes sentences that still fail, and enforces banned-phrase/length rules; `save_letter()` writes `.docx` + `.txt`. |
+| Parse resume | ~20–25 s (then cached) |
+| Fit score for one job | ~10–15 s |
+| Cover letter with fact-check and revisions | ~30–50 s |
+| Rank 3 jobs with full fit scores | ~17 s |
 
-## Example
+**Fact-check example.** On a sample mobile QA posting, the first draft claimed the applicant
+"collaborated with developers to reproduce issues" and "maintained test plans": both taken
+from the job description, neither on the resume. The checker flagged them and the revision
+removed them. On a real Windows endpoint QA posting, it removed a claim of "experience in
+Windows environments, endpoint management" the resume didn't support.
+
+**Ranking example.** A sample mobile QA posting scored 9/10, a real Windows endpoint QA posting
+6/10 (correctly identifying missing Intune and endpoint-management experience), and a senior
+sales role 2/10 with "above your level" and "title matches exclusion 'sales'" flags.
+
+**What didn't work.** The checker still misses some claims that blend two true facts into a
+false one, such as tying a tool listed only under Skills to a specific employer. A larger model
+(`qwen3:32b`) caught no more of these and took ~6.6 minutes per check, so the fix is structural
+(see Known limitations), not a bigger model.
+
+## How it was built
+Built with [Claude Code](https://claude.com/claude-code) as an AI pair programmer. I set the
+requirements (local-only, honest letters, review before sending), tested it against my own
+resume and real job postings, and checked its output claim by claim. Those checks drove most
+of the design: the fact-check loop, sentence deletion, code-enforced style rules, the seniority
+cap and confirmed facts all came from failures found in testing.
+
+## Setup
+1. **Ollama with GPU access.** For example, with podman and the NVIDIA container toolkit:
+   ```bash
+   podman run -d --name ollama --restart=always --device nvidia.com/gpu=all \
+     --security-opt=label=disable -v ollama-models:/root/.ollama \
+     -p 127.0.0.1:11434:11434 docker.io/ollama/ollama:latest
+   podman exec ollama ollama pull qwen3:14b
+   podman exec ollama ollama pull nomic-embed-text
+   ```
+2. **Python environment** with [uv](https://docs.astral.sh/uv/): `uv sync` installs Python 3.12
+   and the dependencies.
+
+Your data (profile, confirmed facts, letters, tracker database) lives in
+`~/.local/share/job-agent/`, outside this repository, readable only by your account.
+
+## Usage
 ```python
 from job_agent.config import load_settings
 from job_agent.llm import LLM
@@ -35,6 +91,8 @@ paths = save_letter(result["letter"], "Example Corp", "QA Engineer")
 ```
 
 ### Rank a batch of saved jobs and track them
+Save one job description per `.txt` file in `~/.local/share/job-agent/jobs-inbox/`, named
+`Company - Role.txt` or starting with `Company:` / `Role:` / `URL:` header lines.
 ```python
 from job_agent.ranking import load_jobs, rank_jobs
 from job_agent.tracker import Tracker
@@ -47,17 +105,27 @@ for job in ranked:
 app_id = ranked[0].tracker_id
 tracker.attach_letter(app_id, paths["docx"])
 tracker.set_status(app_id, "applied", "sent via careers page")
-print(tracker.counts())
 ```
-Run with `uv run python your_script.py` from `src/` or with `src` on `PYTHONPATH`.
+Run scripts with `uv run python your_script.py` from the project folder.
+
+## Modules (`src/job_agent/`)
+| Module | Purpose |
+|---|---|
+| `config.py` | Settings, data paths, confirmed facts (`add_fact()`, `load_facts()`). |
+| `llm.py` | Ollama client: chat with optional JSON schema and per-call model, plus embeddings. |
+| `resume.py` | Resume text extraction, `parse_profile()`, cached `load_or_parse()`. |
+| `intent.py` | `expand_intent()` search expansion and `cap_seniority()`. |
+| `ranking.py` | `load_jobs()` and `rank_jobs()` for saved job descriptions. Nothing is fetched from the web. |
+| `letters.py` | `score_fit()`, `write_letter()` with fact-check, revision and deletion, `save_letter()`. |
+| `tracker.py` | `Tracker`: SQLite application log with statuses and duplicate detection. |
 
 ## Tests
-`uv run pytest` — covers the code-only helpers (style checks, sentence removal, letter saving,
-seniority cap, profile caching, tracker, job-file parsing and ranking) using a fake model, so Ollama isn't needed.
+`uv run pytest` runs 47 tests covering style checks, sentence deletion, the full
+draft-check-revise-delete loop, letter saving, the seniority cap, profile caching, confirmed
+facts, the tracker, job-file parsing and ranking. They use a fake model, so Ollama isn't needed.
 
 ## Known limitations
-- The fact-check misses some claims that attribute a tool or duty to the wrong employer
-  (e.g. a tool only listed under Skills). `qwen3:32b` did no better and took ~6.6 min per check.
-  Planned fix: split the resume into sections in code and check each claim against one section.
-- No UI yet, and no job-listing fetcher.
+- The fact-check misses some claims that blend true facts into a false one. Planned fix: split
+  the resume into sections in code and check each claim against only its matching section.
+- No desktop window yet, and no automatic job-listing fetcher (jobs are saved as text files).
 - Always read a letter before sending it.

@@ -1,6 +1,8 @@
 """Turn what the user typed ("android dev", "something in games") into a broad search plan."""
 from __future__ import annotations
 
+import re
+
 from .llm import LLM
 
 INTENT_SCHEMA = {
@@ -28,6 +30,52 @@ Given what they typed and their resume profile, produce a search plan as JSON:
 Interpret intent generously but stay true to what they asked for."""
 
 
+# Seniority levels in order, with words that mark each level in a job title.
+LEVELS = ["Intern", "Junior", "Mid", "Senior", "Staff", "Principal"]
+LEVEL_TITLE_WORDS = {
+    "Senior": [r"\bsenior\b", r"\bsr\.?(?=\s|$)"],
+    "Staff": [r"\bstaff\b", r"\blead\b", r"\barchitect\b", r"\bmanager\b"],
+    "Principal": [r"\bprincipal\b", r"\bdirector\b", r"\bhead of\b", r"\bvp\b",
+                  r"\bvice president\b", r"\bdistinguished\b", r"\bchief\b"],
+}
+
+
+def allowed_levels(years: float) -> list[str]:
+    """Seniority levels a candidate with this much experience can credibly apply for."""
+    if years < 1:
+        return ["Intern", "Junior"]
+    if years < 6:
+        return ["Junior", "Mid"]
+    if years < 9:
+        return ["Mid", "Senior"]
+    if years < 12:
+        return ["Senior", "Staff"]
+    return ["Senior", "Staff", "Principal"]
+
+
+def title_level(title: str) -> str | None:
+    """The highest seniority level a title signals, or None if it doesn't say."""
+    lower = title.lower()
+    for level in ("Principal", "Staff", "Senior"):
+        if any(re.search(p, lower) for p in LEVEL_TITLE_WORDS[level]):
+            return level
+    return None
+
+
+def cap_seniority(plan: dict, years: float) -> dict:
+    """Drop seniority levels and titles above what the experience supports."""
+    allowed = allowed_levels(years)
+    top = max(LEVELS.index(lvl) for lvl in allowed)
+    plan["seniority"] = [s for s in plan.get("seniority", [])
+                         if s.title() in LEVELS and LEVELS.index(s.title()) <= top] or allowed
+    kept, dropped = [], []
+    for t in plan.get("titles", []):
+        lvl = title_level(t)
+        (dropped if lvl and LEVELS.index(lvl) > top else kept).append(t)
+    plan["titles"], plan["dropped_titles"] = kept, dropped
+    return plan
+
+
 def expand_intent(llm: LLM, profile: dict, user_intent: str) -> dict:
     summary = (
         f"Headline: {profile.get('headline', '')}\n"
@@ -36,8 +84,12 @@ def expand_intent(llm: LLM, profile: dict, user_intent: str) -> dict:
         f"Skills: {', '.join(profile.get('skills', []))}\n"
         f"Years of experience: {profile.get('years_experience', 0)}"
     )
+    years = float(profile.get("years_experience") or 0)
+    levels = ", ".join(allowed_levels(years))
     plan = llm.chat(INTENT_SYSTEM,
-                    f"They are looking for: {user_intent}\n\nTheir profile:\n{summary}",
+                    f"They are looking for: {user_intent}\n\nTheir profile:\n{summary}\n\n"
+                    f"Only suggest these seniority levels: {levels}. Do not suggest titles above "
+                    f"that level (e.g. no Senior, Lead, Architect or Manager titles unless listed).",
                     schema=INTENT_SCHEMA, temperature=0.3)
     plan["query"] = user_intent
-    return plan
+    return cap_seniority(plan, years)

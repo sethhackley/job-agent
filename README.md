@@ -13,7 +13,7 @@ Local job-application helper. Everything runs on this machine using Ollama.
 | `config.py` | Settings and data paths. Data lives in `~/.local/share/job-agent/` (not in this repo). |
 | `llm.py` | Ollama client: chat (optional JSON schema, per-call model) and embeddings. |
 | `resume.py` | Reads PDF/DOCX/TXT/MD resumes; `parse_profile()` builds a structured profile; `load_or_parse()` caches it and re-parses only when the file changes. |
-| `intent.py` | `expand_intent()` turns a search phrase into related titles, keywords, exclusions and an ideal-job description. |
+| `intent.py` | `expand_intent()` turns a search phrase into related titles, keywords, exclusions and an ideal-job description. Seniority levels and titles above the candidate's experience are filtered out in code (`cap_seniority()`). |
 | `letters.py` | `score_fit()` rates a pasted job description; `write_letter()` drafts a cover letter, fact-checks it against the resume, revises, deletes sentences that still fail, and enforces banned-phrase/length rules; `save_letter()` writes `.docx` + `.txt`. |
 
 ## Example
@@ -32,6 +32,10 @@ print(result["letter"], result["removed"], result["unsupported"])
 save_letter(result["letter"], "Example Corp", "QA Engineer")
 ```
 Run with `uv run python your_script.py` from `src/` or with `src` on `PYTHONPATH`.
+
+## Tests
+`uv run pytest` — covers the code-only helpers (style checks, sentence removal, letter saving,
+seniority cap, profile caching) using a fake model, so Ollama isn't needed.
 
 ## Known limitations
 - The fact-check misses some claims that attribute a tool or duty to the wrong employer

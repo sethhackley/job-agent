@@ -9,6 +9,8 @@ DATA_DIR = Path.home() / ".local" / "share" / "job-agent"
 SETTINGS_PATH = DATA_DIR / "settings.json"
 PROFILE_PATH = DATA_DIR / "profile.json"
 DB_PATH = DATA_DIR / "jobs.db"
+TRACKER_PATH = DATA_DIR / "applications.db"
+JOBS_INBOX = DATA_DIR / "jobs-inbox"  # drop pasted job descriptions here as .txt files
 BROWSER_DIR = DATA_DIR / "browser-profile"
 LETTERS_DIR = DATA_DIR / "letters"
 

@@ -129,3 +129,7 @@ facts, the tracker, job-file parsing and ranking. They use a fake model, so Olla
   the resume into sections in code and check each claim against only its matching section.
 - No desktop window yet, and no automatic job-listing fetcher (jobs are saved as text files).
 - Always read a letter before sending it.
+
+## License
+Copyright © 2026 Seth Hackley. All rights reserved. This code is shared for viewing only;
+see [LICENSE](LICENSE). No permission is granted to copy, modify, distribute or reuse it.
